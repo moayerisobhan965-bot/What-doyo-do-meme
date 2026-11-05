@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: whatmeme_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: whatmeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: whatmeme_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatmeme_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@postgres:5432/whatmeme
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=change_this_to_a_very_long_random_string
+      - SMTP_PASSWORD=your_resend_api_key_here
+      - SMTP_FROM=noreply@whatmeme.de
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app/static/memes:/app/static/memes
+      - ./data:/app/data
+    networks:
+      - whatmeme_network
+
+  # nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: whatmeme_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - whatmeme_network
+
+  # Certbot for SSL (Let's Encrypt)
+  certbot:
+    image: certbot/certbot
+    container_name: whatmeme_certbot
+    restart: "no"
+    volumes:
+      - ./nginx/ssl:/etc/letsencrypt
+      - ./nginx/certbot:/var/lib/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  whatmeme_network:
+    driver: bridge
