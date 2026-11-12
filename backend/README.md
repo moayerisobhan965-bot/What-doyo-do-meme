@@ -62,6 +62,8 @@ Oder komplett mit Docker: `docker compose up -d` (Port 80/443 über nginx).
 | `WIN_SCORE` | Punkte zum Sieg | `5` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token-Gültigkeit | `720` |
 | `DEV_CODE_RETURN` | `1` = Codes in API-Antwort (nur Tests!) | `0` |
+| `GOOGLE_CLIENT_ID` | Google OAuth Client-ID | leer = Mock-Modus |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth Client-Secret | leer = Mock-Modus |
 
 > ⚠️ Ohne `SMTP_PASSWORD` werden E-Mail-Codes nur ins Server-Log geschrieben
 > (Entwicklungsmodus). Mit Resend-Key werden echte E-Mails versendet.
@@ -76,14 +78,27 @@ POST /api/auth/login           {email, password}
 POST /api/auth/verify-email    {token}
 POST /api/auth/forgot-password {email}
 POST /api/auth/reset-password  {token, new_password}
+GET  /api/auth/google/url?port=8123      Google-Login starten
+POST /api/auth/google/callback  {code, state, port}
 GET  /api/users/me             (Bearer-Token)
 GET  /api/users/me/stats       (Bearer-Token)
 POST /api/rooms                {max_players: 2-10, rounds_limit: 0|5|10|20} → 4-stelliger Code
 GET  /api/rooms/{code}
-GET  /api/memes                Meme-Liste
+GET  /api/memes                Meme-Liste (mit Namen)
 GET  /api/captions             Textkarten
 GET  /meme-images/{id}.png     Meme-Bilder (generiert)
 ```
+
+### 🔵 Google-Login (Ablauf)
+
+1. Client ruft `GET /api/auth/google/url?port=8123` → bekommt URL + State
+2. Client startet lokalen Mini-Server auf `127.0.0.1:8123` und öffnet die URL im Browser
+3. Google leitet den Browser auf `http://127.0.0.1:8123/?code=...&state=...` um
+4. Client fängt den Redirect ab und schickt `POST /api/auth/google/callback`
+5. Backend tauscht den Code gegen Google-Tokens (Server-seitig, sicher),
+   verifiziert das ID-Token mit Googles Zertifikaten → Login oder Konto-Erstellung
+
+Ohne `GOOGLE_CLIENT_ID/SECRET` läuft der **Mock-Modus** (der "Code" = E-Mail, nur für Tests).
 
 ### WebSocket: `/ws/{room_code}/{player_id}?token=JWT`
 

@@ -7,8 +7,11 @@ import json
 import os
 import random
 import asyncio
+import secrets
+import re
 import struct
 import zlib
+import urllib.parse
 import bcrypt
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -52,6 +55,9 @@ class Settings:
     WIN_SCORE = int(os.getenv("WIN_SCORE", "5"))
     # Nur für Tests: Verifizierungs-Codes in der API-Antwort zurückgeben (NIE in Produktion setzen!)
     DEV_CODE_RETURN = os.getenv("DEV_CODE_RETURN", "0") == "1"
+    # Google OAuth (Google Cloud Console → OAuth-Client "Web"/"Desktop" erstellen)
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
 settings = Settings()
 
@@ -220,6 +226,12 @@ class RedisStore:
 
     async def set_refresh_token(self, token: str, user_id: int):
         await self.client.set(f"refresh:{token}", str(user_id), ex=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
+
+    async def set_google_state(self, state: str):
+        await self.client.set(f"gstate:{state}", "1", ex=600)
+
+    async def check_google_state(self, state: str) -> bool:
+        return bool(await self.client.get(f"gstate:{state}"))
 
 store = RedisStore(settings.REDIS_URL)
 
@@ -1124,6 +1136,153 @@ async def reset_password(data: PasswordResetSchema, db: AsyncSession = Depends(g
     await db.commit()
     print(f"✅ Passwort geändert für {user.email}")
     return {"message": "Passwort erfolgreich geändert! Du kannst dich jetzt einloggen."}
+
+# ===== GOOGLE LOGIN =====
+class GoogleCallback(BaseModel):
+    code: str
+    state: str
+    port: int = 8123
+
+async def _unique_username(db: AsyncSession, name: str, email: str) -> str:
+    base = re.sub(r"[^a-zA-Z0-9_]", "", (name or "").lower())[:30]
+    if len(base) < 3:
+        base = "spieler" + re.sub(r"[^a-zA-Z0-9_]", "", email.split("@")[0])[:12]
+    if len(base) < 3:
+        base = "spieler"
+    candidate = base
+    i = 2
+    while True:
+        result = await db.execute(select(User).where(User.username == candidate))
+        if not result.scalar_one_or_none():
+            return candidate
+        candidate = f"{base[:28]}{i}"
+        i += 1
+
+@app.get("/api/auth/google/url")
+async def google_auth_url(port: int = 8123):
+    """Liefert die Google-Login-URL + State. Der Client startet einen lokalen
+    Server auf 127.0.0.1:{port} und öffnet die URL im Browser."""
+    state = secrets.token_urlsafe(16)
+    await store.set_google_state(state)
+
+    if not settings.GOOGLE_CLIENT_ID:
+        # Entwicklungs-Mock: URL zeigt auf den lokalen Server (Login später per Mock-Code)
+        return {
+            "url": f"http://127.0.0.1:{port}/mock-google?state={state}",
+            "state": state,
+            "port": port,
+            "mock": True,
+        }
+
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": f"http://127.0.0.1:{port}/",
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "prompt": "select_account",
+    })
+    return {"url": url, "state": state, "port": port, "mock": False}
+
+@app.post("/api/auth/google/callback")
+async def google_callback(data: GoogleCallback, db: AsyncSession = Depends(get_db)):
+    if not await store.check_google_state(data.state):
+        raise HTTPException(status_code=400, detail="Ungültiger Login-Versuch")
+
+    email = None
+    name = None
+
+    if settings.GOOGLE_CLIENT_SECRET:
+        # Echter Google OAuth: Code gegen Tokens tauschen + ID-Token verifizieren
+        try:
+            redirect_uri = f"http://127.0.0.1:{data.port}/"
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "https://oauth2.googleapis.com/token",
+                    data={
+                        "code": data.code,
+                        "client_id": settings.GOOGLE_CLIENT_ID,
+                        "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                        "redirect_uri": redirect_uri,
+                        "grant_type": "authorization_code",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    tokens = await resp.json()
+            id_token = tokens.get("id_token")
+            if not id_token:
+                raise ValueError("Kein ID-Token von Google erhalten")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://www.googleapis.com/oauth2/v3/certs",
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    jwks = await resp.json()
+
+            from jose import jwk as jose_jwk
+            header = jwt.get_unverified_header(id_token)
+            key_dict = next((k for k in jwks["keys"] if k["kid"] == header["kid"]), None)
+            if not key_dict:
+                raise ValueError("Google-Schlüssel nicht gefunden")
+            key = jose_jwk.construct(key_dict)
+            payload = jwt.decode(
+                id_token, key, algorithms=["RS256"],
+                audience=settings.GOOGLE_CLIENT_ID,
+            )
+            email = payload.get("email")
+            name = payload.get("name", "")
+            if not payload.get("email_verified"):
+                raise ValueError("Google-E-Mail nicht verifiziert")
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"❌ Google-Login Fehler: {e}")
+            raise HTTPException(status_code=400, detail="Google-Login fehlgeschlagen")
+    else:
+        # Entwicklungs-Mock: der "Code" enthält direkt die E-Mail
+        if "@" not in data.code:
+            raise HTTPException(
+                status_code=400,
+                detail="Google Login nicht konfiguriert (GOOGLE_CLIENT_ID/SECRET fehlen)",
+            )
+        email = data.code
+        name = data.code.split("@")[0].replace(".", " ").replace("_", " ").title()
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Keine E-Mail von Google erhalten")
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    is_new = False
+    if not user:
+        user = User(
+            email=email,
+            username=await _unique_username(db, name, email),
+            hashed_password=hash_password(secrets.token_urlsafe(16)),
+            is_verified=True,   # Google-E-Mail ist bereits verifiziert
+            is_active=True,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        is_new = True
+    elif not user.is_verified:
+        user.is_verified = True
+        await db.commit()
+
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    await store.set_refresh_token(refresh_token, user.id)
+
+    print(f"✅ Google-Login: {email} (neu={is_new})")
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user_dict(user),
+        "is_new": is_new,
+    }
 
 # ===== USER =====
 @app.get("/api/users/me")

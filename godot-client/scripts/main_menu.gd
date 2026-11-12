@@ -22,9 +22,15 @@ var _pending_email := ""
 var _pending_password := ""
 var _pending_username := ""
 
+var _google: GoogleLogin
+
 func _ready() -> void:
 	_build_ui()
 	Global.ws_message.connect(_on_ws_message)
+
+func _process(_delta: float) -> void:
+	if _google != null:
+		_google._poll()
 
 func _exit_tree() -> void:
 	if Global.ws_message.is_connected(_on_ws_message):
@@ -85,6 +91,22 @@ func _build_ui() -> void:
 	_action_button = UI.button("Einloggen", 30)
 	_action_button.pressed.connect(_on_action_pressed)
 	box.add_child(_action_button)
+
+	# Google-Login
+	var google_sep := HBoxContainer.new()
+	google_sep.add_theme_constant_override("separation", 10)
+	box.add_child(google_sep)
+	var line1 := HSeparator.new()
+	line1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	google_sep.add_child(line1)
+	google_sep.add_child(UI.label("oder", 20, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER))
+	var line2 := HSeparator.new()
+	line2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	google_sep.add_child(line2)
+
+	var google_button := UI.button("🔵 Mit Google anmelden", 26, Color("4285F4"))
+	google_button.pressed.connect(_on_google_pressed)
+	box.add_child(google_button)
 
 	# Status
 	_status = UI.label("", 22, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER)
@@ -183,6 +205,24 @@ func _on_action_pressed() -> void:
 		Global.http(HTTPClient.METHOD_POST, "/api/auth/login",
 			{"email": email, "password": password},
 			_on_login_result)
+
+func _on_google_pressed() -> void:
+	_set_status("Öffne Google-Login im Browser...")
+	_google = GoogleLogin.new()
+	_google.completed.connect(_on_google_completed)
+	_google.got_tokens.connect(_on_google_tokens)
+	_google.start()
+
+func _on_google_completed(success: bool, message: String) -> void:
+	if not success:
+		_set_status("❌ " + message, UI.RED)
+	else:
+		_set_status(message, UI.GREEN)
+
+func _on_google_tokens(data: Dictionary) -> void:
+	Global.set_auth(str(data.get("access_token", "")), data.get("user", {}))
+	_set_status("✅ Erfolgreich eingeloggt!", UI.GREEN)
+	_go_home()
 
 func _on_forgot_pressed() -> void:
 	var email := _email.text.strip_edges()

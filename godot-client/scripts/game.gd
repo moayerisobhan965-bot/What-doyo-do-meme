@@ -5,6 +5,7 @@ var _round_label: Label
 var _caption_label: Label
 var _score_label: Label
 var _scoreboard: VBoxContainer
+var _scoreboard_flow: FlowContainer
 var _body: Control          # aktueller Body (wird ersetzt)
 var _status: Label
 var _back_panel: Control    # bei Verbindungsverlust
@@ -34,65 +35,84 @@ func _exit_tree() -> void:
 func _build_ui() -> void:
 	add_child(UI.background())
 
-	# Obere Leiste
+	# Obere Leiste: Runde | Meine Punkte
 	var top := PanelContainer.new()
 	var top_sb := StyleBoxFlat.new()
 	top_sb.bg_color = UI.PANEL
 	top.add_theme_stylebox_override("panel", top_sb)
 	top.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	top.custom_minimum_size = Vector2(0, 84)
+	top.custom_minimum_size = Vector2(0, 60)
 	add_child(top)
 
 	var top_row := HBoxContainer.new()
 	top_row.add_theme_constant_override("separation", 18)
 	top.add_child(top_row)
 
-	_round_label = UI.label("Runde 1", 26, UI.GOLD, HORIZONTAL_ALIGNMENT_LEFT)
-	_round_label.custom_minimum_size = Vector2(150, 0)
+	_round_label = UI.label("Runde 1", 24, UI.GOLD, HORIZONTAL_ALIGNMENT_LEFT)
+	_round_label.custom_minimum_size = Vector2(220, 0)
 	top_row.add_child(_round_label)
 
-	_caption_label = UI.label("", 26, UI.TEXT, HORIZONTAL_ALIGNMENT_CENTER)
-	_caption_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_caption_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	top_row.add_child(_caption_label)
-
-	_score_label = UI.label("Punkte: 0", 26, UI.GREEN, HORIZONTAL_ALIGNMENT_RIGHT)
-	_score_label.custom_minimum_size = Vector2(190, 0)
+	_score_label = UI.label("Punkte: 0", 24, UI.GREEN, HORIZONTAL_ALIGNMENT_RIGHT)
+	_score_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_row.add_child(_score_label)
 
-	# Scoreboard (rechts oben, immer sichtbar)
+	# Caption-Zeile
+	var caption_panel := PanelContainer.new()
+	var cap_sb := StyleBoxFlat.new()
+	cap_sb.bg_color = Color("16213e")
+	cap_sb.content_margin_left = 14.0
+	cap_sb.content_margin_right = 14.0
+	cap_sb.content_margin_top = 6.0
+	cap_sb.content_margin_bottom = 6.0
+	caption_panel.add_theme_stylebox_override("panel", cap_sb)
+	caption_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	caption_panel.offset_top = 64
+	caption_panel.offset_bottom = 64 + 78
+	add_child(caption_panel)
+	_caption_label = UI.label("", 22, UI.TEXT, HORIZONTAL_ALIGNMENT_CENTER)
+	_caption_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_caption_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_caption_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	caption_panel.add_child(_caption_label)
+
+	# Scoreboard (Streifen unter der Caption, immer sichtbar)
 	var sb_panel := PanelContainer.new()
 	var sb_style := StyleBoxFlat.new()
 	sb_style.bg_color = Color("0d1b2a")
-	sb_style.set_corner_radius_all(12)
-	sb_style.content_margin_left = 14.0
-	sb_style.content_margin_right = 14.0
-	sb_style.content_margin_top = 10.0
-	sb_style.content_margin_bottom = 10.0
+	sb_style.set_corner_radius_all(10)
+	sb_style.content_margin_left = 12.0
+	sb_style.content_margin_right = 12.0
+	sb_style.content_margin_top = 8.0
+	sb_style.content_margin_bottom = 8.0
 	sb_panel.add_theme_stylebox_override("panel", sb_style)
-	sb_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	sb_panel.offset_top = 92
-	sb_panel.offset_right = -12
-	sb_panel.offset_left = -320
+	sb_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	sb_panel.offset_top = 146
+	sb_panel.offset_bottom = 250
 	add_child(sb_panel)
 	_scoreboard = VBoxContainer.new()
-	_scoreboard.add_theme_constant_override("separation", 4)
+	_scoreboard.add_theme_constant_override("separation", 2)
 	sb_panel.add_child(_scoreboard)
+	var sb_flow := FlowContainer.new()
+	sb_flow.add_theme_constant_override("h_separation", 12)
+	sb_flow.add_theme_constant_override("v_separation", 2)
+	sb_flow.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scoreboard.add_child(sb_flow)
+	_scoreboard_flow = sb_flow
 
 	# Body-Bereich
 	var body_area := MarginContainer.new()
 	body_area.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	body_area.add_theme_constant_override("margin_top", 96)
+	body_area.add_theme_constant_override("margin_top", 258)
 	body_area.add_theme_constant_override("margin_bottom", 84)
-	body_area.add_theme_constant_override("margin_left", 16)
-	body_area.add_theme_constant_override("margin_right", 16)
+	body_area.add_theme_constant_override("margin_left", 10)
+	body_area.add_theme_constant_override("margin_right", 10)
 	add_child(body_area)
 	_body = Control.new()
 	_body.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	body_area.add_child(_body)
 
 	# Statuszeile unten
-	_status = UI.label("", 22, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER)
+	_status = UI.label("", 20, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	_status.offset_top = -72
@@ -190,20 +210,18 @@ func _clear_body() -> void:
 	_meme_buttons.clear()
 
 func _update_scoreboard(room: Dictionary, scores: Dictionary) -> void:
-	for child in _scoreboard.get_children():
+	for child in _scoreboard_flow.get_children():
 		child.queue_free()
-	var title := UI.label("🏆 Punkte", 20, UI.GOLD, HORIZONTAL_ALIGNMENT_CENTER)
-	_scoreboard.add_child(title)
 	for p in room.get("players", []):
 		var pid := str(p.get("id", ""))
 		var s := int(scores.get(pid, 0))
 		var nm := str(p.get("name", "?"))
 		if pid == Global.player_id:
 			nm += " (Du)"
-		var lbl := UI.label("%s: %d" % [nm, s], 22, UI.TEXT, HORIZONTAL_ALIGNMENT_LEFT)
+		var lbl := UI.label("%s: %d" % [nm, s], 20, UI.TEXT, HORIZONTAL_ALIGNMENT_LEFT)
 		if pid == Global.player_id:
 			lbl.add_theme_color_override("font_color", UI.GREEN)
-		_scoreboard.add_child(lbl)
+		_scoreboard_flow.add_child(lbl)
 
 func _player_name(pid: String) -> String:
 	for p in Global.room.get("players", []):
@@ -264,9 +282,9 @@ func _show_playing(room: Dictionary) -> void:
 	v.add_child(UI.label("Wähle das beste Meme zur Caption!", 28, UI.TEXT, HORIZONTAL_ALIGNMENT_CENTER))
 
 	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(grid)
 
@@ -276,7 +294,7 @@ func _show_playing(room: Dictionary) -> void:
 		var url := str(meme.get("url", ""))
 		var mname := str(meme.get("name", ""))
 		var cell := UI.button("")
-		cell.custom_minimum_size = Vector2(360, 210)
+		cell.custom_minimum_size = Vector2(330, 230)
 		cell.pressed.connect(_on_meme_selected.bind(mid))
 		_meme_buttons[mid] = cell
 		grid.add_child(cell)
@@ -285,7 +303,7 @@ func _show_playing(room: Dictionary) -> void:
 		inner.alignment = BoxContainer.ALIGNMENT_CENTER
 		cell.add_child(inner)
 		var rect := TextureRect.new()
-		rect.custom_minimum_size = Vector2(0, 150)
+		rect.custom_minimum_size = Vector2(0, 170)
 		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		inner.add_child(rect)
@@ -330,9 +348,9 @@ func _show_voting(room: Dictionary) -> void:
 	v.add_child(UI.label("🗳️ Stimme für das beste Meme!", 30, UI.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
 
 	var grid := GridContainer.new()
-	grid.columns = submissions.size() if submissions.size() > 0 else 1
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(grid)
 
@@ -345,7 +363,7 @@ func _show_voting(room: Dictionary) -> void:
 		var own := pid_str == Global.player_id
 
 		var cell := UI.button("", 24, UI.PANEL if own else UI.PANEL_LIGHT)
-		cell.custom_minimum_size = Vector2(340, 210)
+		cell.custom_minimum_size = Vector2(330, 230)
 		cell.disabled = own
 		if not own:
 			cell.pressed.connect(_on_vote_pressed.bind(pid_str))
@@ -357,7 +375,7 @@ func _show_voting(room: Dictionary) -> void:
 		cell.add_child(inner)
 
 		var rect := TextureRect.new()
-		rect.custom_minimum_size = Vector2(0, 150)
+		rect.custom_minimum_size = Vector2(0, 170)
 		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		inner.add_child(rect)

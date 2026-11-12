@@ -30,6 +30,9 @@ var _expect_round := 0
 var fails := 0
 var passes := 0
 var _closed_printed: Dictionary = {}
+var _gl: GoogleLogin
+var _gl_result: Array = []
+var _fake_client: StreamPeerTCP
 
 func _initialize() -> void:
 	g = load("res://scripts/global.gd").new()
@@ -61,6 +64,11 @@ func _process(_delta: float) -> bool:
 						_closed_printed[p] = true
 						print("  ⚠️ %s WS CLOSED code=%d reason=%s" % [p, peer.get_close_code(), peer.get_close_reason()])
 
+	if _gl != null:
+		_gl._poll()
+	if _fake_client != null:
+		_fake_client.poll()
+
 	if phase == -1:
 		if _cond.is_valid() and _cond.call():
 			phase = _next_phase
@@ -79,15 +87,20 @@ func _process(_delta: float) -> bool:
 			7: _check_login(1) ; _send_register(2, 8)
 			8: _check_register(2) ; _send_verify(2, 9)
 			9: _check_verify(2) ; _send_login(2, 10)
-			10: _check_login(2) ; _create_room()
-			11: _open_ws()
-			12: _join_room()
-			13: _start_game()
-			14: _submit_memes()
-			15: _vote()
-			16: _after_round()
-			17: _final_checks()
-			18: _done()
+			10: _check_login(2) ; _google_start()
+			11: _google_callback()
+			12: _check_google() ; _create_room()
+			13: _open_ws()
+			14: _join_room()
+			15: _start_game()
+			16: _submit_memes()
+			17: _vote()
+			18: _after_round()
+			19: _final_checks()
+			20: _google_client_start()
+			21: _google_client_redirect()
+			22: _google_client_wait()
+			23: _done()
 	return false
 
 # ─────────────── HTTP-Helfer ───────────────
@@ -152,7 +165,7 @@ func _create_room() -> void:
 	print("Raum erstellen (Host: %s, 2 Runden-Limit)..." % names[0])
 	g.set_auth(str(tokens[names[0]]), {"id": ids[names[0]]})
 	_http(HTTPClient.METHOD_POST, "/api/rooms", {"max_players": 3, "rounds_limit": 2})
-	_wait(func(): return _http_done, 11)
+	_wait(func(): return _http_done, 13)
 
 func _open_ws() -> void:
 	if not _check_http(200, "Raum erstellt"):
@@ -171,7 +184,7 @@ func _open_ws() -> void:
 	var peer3 := WebSocketPeer.new()
 	ws["p3"] = peer3
 	peer3.connect_to_url("%s/ws/%s/%s?token=%s" % [g.WS_BASE, room_code, str(ids[names[2]]), tokens[names[2]].uri_encode()])
-	_wait(_all_ws_open, 12)
+	_wait(_all_ws_open, 14)
 
 func _join_room() -> void:
 	passes += 1
@@ -179,14 +192,14 @@ func _join_room() -> void:
 	g.send_ws({"event": "join_room"})
 	for p in ["p2", "p3"]:
 		ws[p].send_text(JSON.stringify({"event": "join_room"}))
-	_wait(_all_have_room, 13)
+	_wait(_all_have_room, 15)
 
 func _start_game() -> void:
 	passes += 1
 	print("  ✅ Alle im Raum - Spiel starten")
 	g.send_ws({"event": "start_game"})
 	_expect_round = 1
-	_wait(_all_have_round_started, 14)
+	_wait(_all_have_round_started, 16)
 
 func _submit_memes() -> void:
 	passes += 1
@@ -207,7 +220,7 @@ func _submit_memes() -> void:
 			g.send_ws({"event": "submit_meme", "meme_id": mid})
 		else:
 			ws[_key(n)].send_text(JSON.stringify({"event": "submit_meme", "meme_id": mid}))
-	_wait(_all_have_voting_started, 15)
+	_wait(_all_have_voting_started, 17)
 
 func _vote() -> void:
 	passes += 1
@@ -238,7 +251,7 @@ func _vote() -> void:
 			g.send_ws({"event": "vote", "target_player_id": target})
 		else:
 			ws[_key(n)].send_text(JSON.stringify({"event": "vote", "target_player_id": target}))
-	_wait(_all_have_round_result, 16)
+	_wait(_all_have_round_result, 18)
 
 func _after_round() -> void:
 	passes += 1
@@ -257,11 +270,11 @@ func _after_round() -> void:
 			if int(s) >= 2:
 				over = true
 	if over:
-		_wait(_all_have_game_over, 17)
+		_wait(_all_have_game_over, 19)
 	else:
 		g.send_ws({"event": "next_round"})
 		_expect_round += 1
-		_wait(_all_have_round_started, 14)
+		_wait(_all_have_round_started, 16)
 
 func _final_checks() -> void:
 	passes += 1
@@ -297,9 +310,100 @@ func _final_checks() -> void:
 			fails += 1
 			print("❌ Meme-Bild konnte nicht geladen werden")
 	)
-	_wait(func(): return g.texture_cache.has(g.API_BASE + url) or g.texture_failed.has(g.API_BASE + url), 18)
+	_wait(func(): return g.texture_cache.has(g.API_BASE + url) or g.texture_failed.has(g.API_BASE + url), 20)
+
+# ─────────────── Google-Login (Backend-Mock) ───────────────
+var _google_state := ""
+var _google_email := ""
+
+func _google_start() -> void:
+	print("Google-Login starten (Mock)...")
+	_http(HTTPClient.METHOD_GET, "/api/auth/google/url?port=8451", null)
+	_wait(func(): return _http_done, 11)
+
+func _google_callback() -> void:
+	if _http_code != 200:
+		_fail("Google-URL: HTTP %d (%s)" % [_http_code, _http_text.left(120)])
+		return
+	var data = JSON.parse_string(_http_text)
+	if data is Dictionary and data.has("state"):
+		_google_state = str(data["state"])
+		passes += 1
+		print("  ✅ Google-URL erhalten (state=%s)" % _google_state.left(8) + "...")
+	else:
+		_fail("Google-URL ohne state")
+		return
+	_google_email = "googlemock%s@test.de" % ts
+	_http(HTTPClient.METHOD_POST, "/api/auth/google/callback",
+		{"code": _google_email, "state": _google_state, "port": 8451})
+	_wait(func(): return _http_done, 12)
+
+func _check_google() -> void:
+	if _http_code != 200:
+		_fail("Google-Callback: HTTP %d (%s)" % [_http_code, _http_text.left(120)])
+		return
+	var data = JSON.parse_string(_http_text)
+	if data is Dictionary and data.has("access_token"):
+		var u: Dictionary = data.get("user", {})
+		if str(u.get("email", "")) != _google_email:
+			_fail("Google-User E-Mail falsch: %s" % str(u.get("email", "")))
+			return
+		if bool(u.get("is_verified", false)) != true:
+			_fail("Google-User nicht verifiziert")
+			return
+		passes += 1
+		print("  ✅ Google-Login erfolgreich (%s)" % _google_email)
+	else:
+		_fail("Google-Callback ohne access_token")
+		return
+
+func _google_client_start() -> void:
+	print("GoogleLogin-Klasse testen (Client-Flow mit simuliertem Browser)...")
+	_gl = GoogleLogin.new()
+	_gl.completed.connect(func(ok, msg): _gl_result = [ok, msg])
+	_gl.start(8452, false)  # ohne echten Browser
+	_wait(_gl_ready, 21)
+
+func _gl_ready() -> bool:
+	return _gl != null and _gl._server != null and _gl._server.is_listening()
+
+func _google_client_redirect() -> void:
+	passes += 1
+	print("  ✅ Lokaler Server läuft - simuliere Google-Redirect")
+	_fake_client = StreamPeerTCP.new()
+	var err := _fake_client.connect_to_host("127.0.0.1", 8452)
+	if err != OK:
+		_fail("Test-Browser kann nicht verbinden")
+		return
+	_wait(_fake_send, 22)
+
+func _fake_send() -> bool:
+	if _fake_client == null:
+		return false
+	_fake_client.poll()
+	if _fake_client.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+		var st: String = _gl._state
+		var code := "googleclient%s@test.de" % ts
+		var req := "GET /?code=%s&state=%s HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" % [code.uri_encode(), st.uri_encode()]
+		_fake_client.put_data(req.to_utf8_buffer())
+		return true
+	return false
+
+func _google_client_wait() -> void:
+	_wait(_gl_finished, 23)
+
+func _gl_finished() -> bool:
+	return _gl != null and _gl.is_finished()
 
 func _done() -> void:
+	# GoogleLogin-Ergebnis prüfen
+	if not _gl_result.is_empty():
+		if _gl_result[0] == true:
+			passes += 1
+			print("  ✅ GoogleLogin-Klasse: %s" % str(_gl_result[1]))
+		else:
+			fails += 1
+			print("❌ GoogleLogin-Klasse fehlgeschlagen: %s" % str(_gl_result[1]))
 	g.send_ws({"event": "leave_room"})
 	g.close_ws()
 	for p in ["p2", "p3"]:

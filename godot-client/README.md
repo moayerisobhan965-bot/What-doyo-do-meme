@@ -2,6 +2,28 @@
 
 Multiplayer-Meme-Spiel für **Android & Desktop** - verbindet sich mit dem What-Meme-Backend.
 
+## 📱 Design
+
+- **Hochformat** (wie YouTube - kein Querformat wie bei Auto-Spielen)
+- Große Touch-Buttons, virtuelle Tastatur, Android-Zurück-Button
+- Login mit **E-Mail + Code** ODER **Google-Konto**
+
+## 🔵 Google-Login einrichten (Backend)
+
+1. Google Cloud Console → **APIs & Dienste → Anmeldedaten → OAuth-Client-ID erstellen**
+2. Typ: **Webanwendung** (der Redirect läuft über `http://127.0.0.1:{port}/`)
+3. Backend starten mit:
+   ```bash
+   GOOGLE_CLIENT_ID="xxx.apps.googleusercontent.com" \
+   GOOGLE_CLIENT_SECRET="GOCSPX-xxx" \
+   python3 -m uvicorn backend:app --port 8000
+   ```
+4. Ohne diese Keys läuft das Backend im **Mock-Modus** (zum Testen ohne Google)
+
+> Der Client startet beim Google-Login einen **lokalen Mini-Server** (127.0.0.1:8123),
+> öffnet den Browser mit der Google-Seite und fängt den Redirect automatisch ab.
+> Es ist kein App-Plugin nötig! Funktioniert auf Android und Desktop.
+
 ## 🚀 Schnellstart
 
 1. **Godot 4.7** installieren (godotengine.org)
@@ -35,13 +57,13 @@ const DEFAULT_API_BASE := "http://10.0.2.2:8000"
 
 Das Preset hat bereits:
 - ✅ Internet-Berechtigung (`permissions/internet=true`)
-- ✅ Querformat (Landscape)
+- ✅ Hochformat (Portrait, wie YouTube)
 - ✅ Immersive Mode (volle Bildschirmfläche)
 - ✅ arm64-Unterstützung
 
 ## 🎮 Spielablauf
 
-1. **Login/Registrieren** - E-Mail-Code wird per E-Mail gesendet (wie bei GitHub)
+1. **Login/Registrieren** - E-Mail-Code (wie bei GitHub) oder **mit Google anmelden**
 2. **Spiel erstellen**: Spieler-Anzahl (2-10) + Runden wählen (5, 10, 20 oder Unbegrenzt)
 3. **Raum erstellen** oder mit 4-stelligem **Code beitreten**
 4. **Lobby** - Freunde einladen, Host startet das Spiel
