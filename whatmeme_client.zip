@@ -1,0 +1,17 @@
+-- Godot Project: What Meme Client
+
+res://icon.svg
+res://scenes/main_menu.tscn
+res://scenes/lobby.tscn
+res://scenes/game.tscn
+res://scenes/result.tscn
+res://scenes/game_over.tscn
+res://scenes/main.tscn
+res://scripts/main_menu.gd
+res://scripts/lobby.gd
+res://scripts/game.gd
+res://scripts/result.gd
+res://scripts/game_over.gd
+res://scripts/global.gd
+res://scripts/main.gd
+res://whatmeme.godot
