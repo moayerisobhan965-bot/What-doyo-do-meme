@@ -8,12 +8,12 @@ signal ws_error(message: String)
 
 # ═══════════════════════════════════════════════════════════════
 # SERVER-KONFIGURATION
+# - Lokaler PC / Handy im gleichen WLAN: http://192.168.178.183:8000
 # - Android Emulator (PC-Server):    http://10.0.2.2:8000
-# - Echte Geräte im gleichen WLAN:   http://<LAN-IP-des-PCs>:8000
 # - Produktion mit Domain:           https://whatmeme.de
 # Kann auch per Umgebungsvariable WM_API_BASE überschrieben werden.
 # ═══════════════════════════════════════════════════════════════
-const DEFAULT_API_BASE := "http://10.0.2.2:8000"
+const DEFAULT_API_BASE := "http://192.168.178.183:8000"
 
 var API_BASE: String
 var WS_BASE: String

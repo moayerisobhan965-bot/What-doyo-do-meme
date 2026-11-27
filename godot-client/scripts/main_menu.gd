@@ -108,6 +108,11 @@ func _build_ui() -> void:
 	google_button.pressed.connect(_on_google_pressed)
 	box.add_child(google_button)
 
+	# Gast-Modus: ohne Eingaben direkt spielen
+	var guest_button := UI.button("🎮 Als Gast spielen (ohne Anmeldung)", 26, UI.PANEL)
+	guest_button.pressed.connect(_on_guest_pressed)
+	box.add_child(guest_button)
+
 	# Status
 	_status = UI.label("", 22, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -213,6 +218,24 @@ func _on_google_pressed() -> void:
 	_google.got_tokens.connect(_on_google_tokens)
 	_google.start()
 
+func _on_guest_pressed() -> void:
+	_set_status("Gast-Konto wird erstellt...")
+	_action_button.disabled = true
+	Global.http(HTTPClient.METHOD_POST, "/api/auth/guest", {}, _on_guest_result)
+
+func _on_guest_result(_result: int, code: int, text: String) -> void:
+	_action_button.disabled = false
+	if code == 200:
+		var data = JSON.parse_string(text)
+		if data is Dictionary and data.has("access_token"):
+			Global.set_auth(str(data["access_token"]), data.get("user", {}))
+			_set_status("✅ Willkommen! Du spielst als Gast.", UI.GREEN)
+			_go_home()
+		else:
+			_set_status("Unerwartete Server-Antwort.", UI.RED)
+	else:
+		_set_status(_error_text(code, text), UI.RED)
+
 func _on_google_completed(success: bool, message: String) -> void:
 	if not success:
 		_set_status("❌ " + message, UI.RED)
@@ -260,8 +283,14 @@ func _on_register_result(_result: int, code: int, text: String) -> void:
 	if code == 200:
 		var data = JSON.parse_string(text)
 		if data is Dictionary:
-			_set_status("✅ Konto erstellt! Wir haben dir einen Code per E-Mail geschickt. Bitte Code eingeben.", UI.GREEN)
-			_show_code_area(false)
+			if data.has("dev_code"):
+				# Dev-Modus (kein E-Mail-Key): Code direkt anzeigen + vorausfüllen
+				_set_status("✅ Konto erstellt! Dev-Code: %s (bereits eingetragen) → Code bestätigen." % str(data["dev_code"]), UI.GREEN)
+				_show_code_area(false)
+				_code.text = str(data["dev_code"])
+			else:
+				_set_status("✅ Konto erstellt! Wir haben dir einen Code per E-Mail geschickt. Bitte Code eingeben.", UI.GREEN)
+				_show_code_area(false)
 		else:
 			_set_status("Unerwartete Server-Antwort.", UI.RED)
 	else:
@@ -298,8 +327,14 @@ func _on_verify_result(_result: int, code: int, text: String) -> void:
 
 func _on_forgot_result(_result: int, code: int, text: String) -> void:
 	if code == 200:
-		_set_status("📧 Reset-Code gesendet! Bitte Code + neues Passwort eingeben.", UI.GREEN)
-		_show_code_area(true)
+		var data = JSON.parse_string(text)
+		if data is Dictionary and data.has("dev_code"):
+			_set_status("📧 Dev-Reset-Code: %s (bereits eingetragen)" % str(data["dev_code"]), UI.GREEN)
+			_show_code_area(true)
+			_code.text = str(data["dev_code"])
+		else:
+			_set_status("📧 Reset-Code gesendet! Bitte Code + neues Passwort eingeben.", UI.GREEN)
+			_show_code_area(true)
 	else:
 		_set_status(_error_text(code, text), UI.RED)
 

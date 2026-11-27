@@ -35,7 +35,7 @@ class Settings:
     APP_NAME = "What Meme"
     APP_ENV = os.getenv("APP_ENV", "development")
     DEBUG = APP_ENV != "production"
-    VERSION = "1.1.0"
+    VERSION = "2.0.0"
     HOST = "0.0.0.0"
     PORT = int(os.getenv("PORT", "8000"))
     DATABASE_URL = os.getenv(
@@ -1077,6 +1077,43 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     await store.set_refresh_token(refresh_token, user.id)
 
     return TokenResponse(access_token=access_token, refresh_token=refresh_token, user=user_dict(user))
+
+@app.post("/api/auth/guest")
+async def guest_login(db: AsyncSession = Depends(get_db)):
+    """Gast-Login: kein Formular nötig, erstellt sofort ein spielbereites Konto."""
+    new_user = None
+    for _ in range(10):
+        name = "Gast" + str(random.randint(100000, 999999))
+        email = name.lower() + "@guest.local"
+        taken_name = await db.execute(select(User).where(User.username == name))
+        taken_email = await db.execute(select(User).where(User.email == email))
+        if taken_name.scalar_one_or_none() is None and taken_email.scalar_one_or_none() is None:
+            new_user = User(
+                email=email,
+                username=name,
+                hashed_password=hash_password(secrets.token_urlsafe(16)),
+                is_verified=True,
+                is_active=True,
+            )
+            break
+    if new_user is None:
+        raise HTTPException(status_code=500, detail="Gast-Konto konnte nicht erstellt werden")
+
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+
+    access_token = create_access_token(data={"sub": str(new_user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(new_user.id)})
+    await store.set_refresh_token(refresh_token, new_user.id)
+
+    print(f"🎮 Gast-Konto erstellt: {new_user.username}")
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user_dict(new_user),
+    }
 
 @app.post("/api/auth/verify-email")
 async def verify_email(data: EmailVerify, db: AsyncSession = Depends(get_db)):
