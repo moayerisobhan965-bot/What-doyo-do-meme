@@ -3,6 +3,7 @@ extends Control
 
 var _greeting: Label
 var _stats: Label
+var _guest_hint: Label
 var _status: Label
 var _code_input: LineEdit
 var _join_button: Button
@@ -51,6 +52,14 @@ func _build_ui() -> void:
 
 	_stats = UI.label("Spiele: - | Siege: -", 22, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER)
 	outer.add_child(_stats)
+
+	# Gast-Hinweis (nur im Gast-Modus sichtbar)
+	_guest_hint = UI.label(
+		"🎮 Gast-Modus: Dein Fortschritt bleibt erhalten, solange du eingeloggt bist.\nZum dauerhaften Spielen: Konto erstellen (E-Mail).",
+		20, UI.GOLD, HORIZONTAL_ALIGNMENT_CENTER)
+	_guest_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_guest_hint.visible = Global.is_guest()
+	outer.add_child(_guest_hint)
 
 	var panel := UI.panel()
 	panel.custom_minimum_size = Vector2(640, 0)

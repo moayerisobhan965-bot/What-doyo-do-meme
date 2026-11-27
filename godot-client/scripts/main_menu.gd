@@ -52,6 +52,7 @@ func _build_ui() -> void:
 	outer.add_child(UI.title("🎮 What Meme", 64))
 	var subtitle := UI.label("Das Multiplayer-Meme-Spiel", 24, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER)
 	outer.add_child(subtitle)
+	outer.add_child(UI.label("Version " + Global.VERSION, 16, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER))
 
 	var panel := UI.panel()
 	panel.custom_minimum_size = Vector2(600, 0)

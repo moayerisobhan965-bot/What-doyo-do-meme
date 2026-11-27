@@ -153,6 +153,7 @@ func _render_room() -> void:
 		var pid := str(p.get("id", ""))
 		var pname := str(p.get("name", "?"))
 		var p_host := bool(p.get("is_host", false))
+		var p_guest := bool(p.get("is_guest", false))
 		var p_score := int(p.get("score", 0))
 
 		var row := HBoxContainer.new()
@@ -163,6 +164,8 @@ func _render_room() -> void:
 		if p_host:
 			name_label.text = "👑 " + pname
 			name_label.add_theme_color_override("font_color", UI.GOLD)
+		if p_guest:
+			name_label.text += " 🎮 Gast"
 		if pid == Global.player_id:
 			name_label.text += " (Du)"
 			name_label.add_theme_color_override("font_color", UI.GREEN)

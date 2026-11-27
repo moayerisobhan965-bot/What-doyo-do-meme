@@ -87,7 +87,7 @@ func _process(_delta: float) -> bool:
 			7: _check_login(1) ; _send_register(2, 8)
 			8: _check_register(2) ; _send_verify(2, 9)
 			9: _check_verify(2) ; _send_login(2, 10)
-			10: _check_login(2) ; _google_start()
+			10: _check_login(2) ; _send_guest(24)
 			11: _google_callback()
 			12: _check_google() ; _create_room()
 			13: _open_ws()
@@ -101,6 +101,8 @@ func _process(_delta: float) -> bool:
 			21: _google_client_redirect()
 			22: _google_client_wait()
 			23: _done()
+			24: _check_guest() ; _send_guest_stats(25)
+			25: _check_guest_stats() ; _google_start()
 	return false
 
 # ─────────────── HTTP-Helfer ───────────────
@@ -159,6 +161,48 @@ func _check_login(idx: int) -> void:
 	else:
 		_fail("Login-Antwort ohne access_token")
 		return
+
+# ─────────────── Gast-Modus ───────────────
+var _guest_token := ""
+var _guest_user: Dictionary = {}
+
+func _send_guest(next_p: int) -> void:
+	print("Gast-Login (ohne E-Mail)...")
+	_http(HTTPClient.METHOD_POST, "/api/auth/guest", {})
+	_wait(func(): return _http_done, next_p)
+
+func _check_guest() -> void:
+	if not _check_http(200, "Gast-Login (HTTP 200)"):
+		return
+	var data = JSON.parse_string(_http_text)
+	if not (data is Dictionary) or not data.has("access_token"):
+		_fail("Gast-Login ohne access_token")
+		return
+	_guest_token = str(data["access_token"])
+	_guest_user = data.get("user", {})
+	passes += 1
+	print("  ✅ Gast-Login erfolgreich (%s)" % str(_guest_user.get("username", "?")))
+	if not str(_guest_user.get("email", "")).ends_with("@guest.local"):
+		_fail("Gast-E-Mail endet nicht mit @guest.local: %s" % str(_guest_user.get("email", "")))
+		return
+	passes += 1
+	print("  ✅ Gast-Konto mit @guest.local E-Mail")
+	if bool(_guest_user.get("is_verified", false)) != true:
+		_fail("Gast-Konto nicht verifiziert")
+		return
+	passes += 1
+	print("  ✅ Gast-Konto ist sofort verifiziert (spielbereit)")
+
+func _send_guest_stats(next_p: int) -> void:
+	g.set_auth(_guest_token, _guest_user)
+	_http(HTTPClient.METHOD_GET, "/api/users/me/stats", null)
+	_wait(func(): return _http_done, next_p)
+
+func _check_guest_stats() -> void:
+	if not _check_http(200, "Gast kann eigene Statistiken laden"):
+		return
+	passes += 1
+	print("  ✅ Gast-Token funktioniert für die API")
 
 # ─────────────── Spiel ───────────────
 func _create_room() -> void:

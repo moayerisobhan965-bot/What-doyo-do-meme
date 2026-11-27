@@ -2,6 +2,18 @@
 
 Multiplayer-Meme-Spiel für **Android & Desktop** - verbindet sich mit dem What-Meme-Backend.
 
+## 🎮 Gast-Modus (Version 3)
+
+Ohne Registrierung sofort spielen:
+
+1. App starten → **„Als Gast spielen (ohne Anmeldung)"** drücken
+2. Das Backend erstellt automatisch ein spielbereites Konto (`GastXXXXXX@guest.local`, sofort verifiziert)
+3. Danach ganz normal: Raum erstellen oder beitreten, spielen 🎉
+
+- Gäste werden in der Lobby mit **„🎮 Gast"** markiert
+- Gast-Konten haben keinen Login (kein Passwort) - der Fortschritt bleibt bis zum Abmelden erhalten
+- Für dauerhaftes Konto: Registrieren mit E-Mail oder Google-Login
+
 ## 📱 Design
 
 - **Hochformat** (wie YouTube - kein Querformat wie bei Auto-Spielen)
@@ -92,8 +104,14 @@ kein externer Bilddienst nötig! Das Spiel funktioniert komplett im eigenen Netz
 # Szenen-Smoke-Test (prüft alle 5 Szenen)
 godot --headless -s res://tests/test_scenes.gd
 
-# Kompletter E2E-Test (3 Spieler, ganzes Spiel - Backend mit DEV_CODE_RETURN=1 nötig)
-WM_API_BASE=http://localhost:8001 godot --headless -s res://tests/test_e2e.gd
+# Kompletter E2E-Test (3 Spieler inkl. Gast-Login - Backend mit DEV_CODE_RETURN=1 nötig)
+WM_API_BASE=http://localhost:8000 godot --headless -s res://tests/test_e2e.gd
+```
+
+Backend-Test für den Gast-Modus (im backend/-Ordner):
+
+```bash
+cd backend && WM_API_BASE=http://localhost:8000 python3 tests/test_guest_e2e.py
 ```
 
 ## 📁 Struktur

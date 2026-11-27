@@ -35,7 +35,7 @@ class Settings:
     APP_NAME = "What Meme"
     APP_ENV = os.getenv("APP_ENV", "development")
     DEBUG = APP_ENV != "production"
-    VERSION = "2.0.0"
+    VERSION = "3.0.0"
     HOST = "0.0.0.0"
     PORT = int(os.getenv("PORT", "8000"))
     DATABASE_URL = os.getenv(
@@ -506,7 +506,7 @@ async def _room_lock(room_code: str) -> asyncio.Lock:
 class GameLogic:
     async def create_room(self, room_code: str, host_id: str, host_name: str,
                           max_players: int = 10, avatar_url: Optional[str] = None,
-                          rounds_limit: int = 0) -> dict:
+                          rounds_limit: int = 0, is_guest: bool = False) -> dict:
         room = {
             "code": room_code,
             "state": GameState.LOBBY,
@@ -515,7 +515,7 @@ class GameLogic:
             "rounds_limit": rounds_limit,  # 0 = unbegrenzt
             "players": [{
                 "id": host_id, "name": host_name, "is_host": True,
-                "is_guest": False, "is_ready": True, "avatar_url": avatar_url, "score": 0
+                "is_guest": is_guest, "is_ready": True, "avatar_url": avatar_url, "score": 0
             }],
             "scores": {host_id: 0},
             "current_round": 0,
@@ -1358,6 +1358,7 @@ async def create_room(room_data: RoomCreate, current_user: User = Depends(get_cu
         max_players=room_data.max_players,
         avatar_url=current_user.avatar_url,
         rounds_limit=room_data.rounds_limit,
+        is_guest=current_user.email.endswith("@guest.local"),
     )
     return room
 
@@ -1413,7 +1414,10 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, player_id: st
                 print(f"📨 WS {room_code}/{player_id} <- {event}")
             try:
                 if event == "join_room":
-                    room = await game_logic.join_room(room_code, player_id, player_name)
+                    room = await game_logic.join_room(
+                        room_code, player_id, player_name,
+                        is_guest=user.email.endswith("@guest.local"),
+                    )
                     if room is None:
                         await manager.send_to_player(room_code, player_id, {
                             "event": "error", "message": "Raum nicht gefunden oder voll"

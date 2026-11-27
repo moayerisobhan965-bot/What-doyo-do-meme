@@ -12,6 +12,8 @@ Multiplayer-Meme-Spiel Backend - **alles in einer Datei**: `backend.py`
 - ✅ Passwort-Reset per E-Mail-Code
 - ✅ Profil + Statistiken (Spiele, Siege, Siegquote)
 - ✅ Passwort-Hashing mit bcrypt
+- ✅ **Gast-Modus**: `POST /api/auth/guest` erstellt sofort ein spielbereites Konto
+  (`GastXXXXXX@guest.local`, verifiziert, kein Passwort nötig)
 
 ### 🎮 Spiel-Features (kompletter Spielfluss)
 - ✅ Räume erstellen/beitreten (4-stelliger Code)
@@ -75,6 +77,7 @@ Oder komplett mit Docker: `docker compose up -d` (Port 80/443 über nginx).
 GET  /health
 POST /api/auth/register        {email, username, password}
 POST /api/auth/login           {email, password}
+POST /api/auth/guest           {} → sofort spielbereites Gast-Konto (Version 3)
 POST /api/auth/verify-email    {token}
 POST /api/auth/forgot-password {email}
 POST /api/auth/reset-password  {token, new_password}
@@ -132,12 +135,15 @@ Server → Client:
 DATABASE_URL="...localhost:5432..." REDIS_URL="redis://localhost:6379/0" \
 WIN_SCORE=2 DEV_CODE_RETURN=1 python3 -m uvicorn backend:app --port 8001
 
-# Godot E2E-Test (im godot-client Ordner):
+# Godot E2E-Test (im godot-client Ordner, inkl. Gast-Login):
 WM_API_BASE=http://localhost:8001 godot --headless -s res://tests/test_e2e.gd
+
+# Gast-Modus E2E-Test (3 Gäste spielen ein komplettes Spiel):
+WM_API_BASE=http://localhost:8001 python3 tests/test_guest_e2e.py
 ```
 
 Der E2E-Test spielt ein komplettes Spiel mit 3 Spielern durch
-(Registrierung → Verifizierung → Login → Raum → 3 Runden → Spielende).
+(Registrierung → Verifizierung → Login → Gast-Login → Raum → Runden → Spielende).
 
 ## 🎮 Spielablauf (Server-Logik)
 

@@ -14,6 +14,7 @@ signal ws_error(message: String)
 # Kann auch per Umgebungsvariable WM_API_BASE überschrieben werden.
 # ═══════════════════════════════════════════════════════════════
 const DEFAULT_API_BASE := "http://192.168.178.183:8000"
+const VERSION := "3.0.0"
 
 var API_BASE: String
 var WS_BASE: String
@@ -62,6 +63,10 @@ func _ready() -> void:
 
 func is_logged_in() -> bool:
 	return not token.is_empty()
+
+func is_guest() -> bool:
+	# Gast-Konten haben immer eine @guest.local E-Mail-Adresse
+	return str(user.get("email", "")).ends_with("@guest.local")
 
 func set_auth(tok: String, u: Dictionary) -> void:
 	token = tok

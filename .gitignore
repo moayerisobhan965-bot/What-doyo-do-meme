@@ -66,6 +66,11 @@ app/static/memes/*.jpeg
 app/static/memes/*.png
 data/memes/
 
+# Lokale Artefakte (Builds liegen auf dem Desktop, nicht im Repo)
+/w/
+whatmeme-client-*.zip
+*.apk
+
 # Testing
 .pytest_cache/
 .coverage
