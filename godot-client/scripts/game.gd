@@ -356,6 +356,22 @@ func _show_voting(room: Dictionary) -> void:
 
 	var ids: Array = submissions.keys()
 	ids.sort()
+	var votable := 0
+	for pid in ids:
+		if str(pid) != Global.player_id:
+			votable += 1
+	if votable == 0:
+		# z.B. 2-Spieler-Runde: nur die eigene Einsendung vorhanden →
+		# nichts zum Wählen, einfach warten
+		var w := VBoxContainer.new()
+		w.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		w.alignment = BoxContainer.ALIGNMENT_CENTER
+		w.add_theme_constant_override("separation", 14)
+		_body.add_child(w)
+		w.add_child(UI.label("🗳️ Abstimmung läuft...", 30, UI.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
+		w.add_child(UI.label("Nur deine Einsendung liegt vor - der Richter entscheidet!", 24, UI.MUTED, HORIZONTAL_ALIGNMENT_CENTER))
+		return
+
 	for pid in ids:
 		var pid_str := str(pid)
 		var meme: Dictionary = submissions[pid]

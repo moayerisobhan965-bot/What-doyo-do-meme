@@ -581,7 +581,45 @@ class GameLogic:
                 room["host_id"] = room["players"][0]["id"]
                 room["players"][0]["is_host"] = True
 
+            # Laufende Runde aufräumen (Disconnect mitten im Spiel)
+            room["round_submitters"] = [pid for pid in room["round_submitters"] if pid != player_id]
+            room["round_voters"] = [pid for pid in room["round_voters"] if pid != player_id]
+            room["submissions"].pop(player_id, None)
+            room["votes"].pop(player_id, None)
+
+            # Zu wenige Spieler für die laufende Runde? → zurück in die Lobby
+            if room["state"] in (GameState.PLAYING, GameState.VOTING, GameState.RESULT) \
+                    and len(room["players"]) < settings.MIN_PLAYERS_TO_START:
+                room["state"] = GameState.LOBBY
+                room["submissions"] = {}
+                room["votes"] = {}
+                room["round_submitters"] = []
+                room["round_voters"] = []
+                room["drawn_caption"] = None
+                room["last_result"] = None
+                self._cancel_timer_sync(room_code)
+                await store.set_room_state(room_code, room)
+                return room
+
             await store.set_room_state(room_code, room)
+
+            # Spiel könnte durch den Austritt jetzt vorankommen
+            if room["state"] == GameState.PLAYING:
+                judge_left = room["judge_index"] >= len(room["players"]) \
+                    or room["players"][room["judge_index"]]["id"] == player_id
+                if judge_left and len(room["players"]) >= settings.MIN_PLAYERS_TO_START:
+                    # Richter hat den Raum verlassen → Runde neu starten
+                    self._schedule(room_code, self.start_round(room_code), delay=0.5)
+                else:
+                    await self._maybe_start_voting_locked(room_code, room)
+            elif room["state"] == GameState.VOTING:
+                room["round_voters"] = [
+                    pid for pid in room["round_voters"]
+                    if any(spid != pid for spid in room["submissions"])
+                ]
+                await store.set_room_state(room_code, room)
+                if not room["round_voters"] or len(room["votes"]) >= len(room["round_voters"]):
+                    await self._finish_round_locked(room_code)
             return room
 
     async def start_game(self, room_code: str, player_id: str) -> dict:
@@ -646,8 +684,10 @@ class GameLogic:
             room = await store.get_room_state(room_code)
             if not room or room["state"] != GameState.PLAYING:
                 raise ValueError("Keine Einreichung möglich")
-            judge = room["players"][room["judge_index"]]
-            if player_id == judge["id"]:
+            judge: dict = {}
+            if 0 <= room["judge_index"] < len(room["players"]):
+                judge = room["players"][room["judge_index"]]
+            if judge and player_id == judge["id"]:
                 raise ValueError("Du bist der Richter diese Runde")
             if player_id not in room["round_submitters"]:
                 raise ValueError("Du bist diese Runde nicht dabei")
@@ -659,25 +699,50 @@ class GameLogic:
             await store.set_room_state(room_code, room)
 
             if len(room["submissions"]) >= len(room["round_submitters"]):
-                room["state"] = GameState.VOTING
-                room["votes"] = {}
-                await store.set_room_state(room_code, room)
-                subs = []
-                for pid, m in room["submissions"].items():
-                    p = next((x for x in room["players"] if x["id"] == pid), None)
-                    subs.append({
-                        "player_id": pid,
-                        "player_name": p["name"] if p else "Unbekannt",
-                        "meme_url": m["url"],
-                    })
-                random.shuffle(subs)
-                await manager.send_to_room(room_code, {
-                    "event": "voting_started",
-                    "submissions": subs,
-                    "judge_id": judge["id"],
-                    "room": room,
-                })
+                await self._maybe_start_voting_locked(room_code, room)
             return room
+
+    async def _maybe_start_voting_locked(self, room_code: str, room: dict) -> None:
+        """Startet die Abstimmung, sobald alle Einsendungen da sind.
+
+        round_voters wird auf die Spieler reduziert, die eine gültige
+        Abstimmungsoption haben. Bei 2 Spielern gibt es nur eine Einsendung -
+        der Einsender kann nicht für sich selbst stimmen und ist daher kein
+        Stimmberechtigter (nur der Richter stimmt ab).
+        """
+        if room["state"] != GameState.PLAYING:
+            return
+        if len(room["submissions"]) < len(room["round_submitters"]):
+            return
+        room["state"] = GameState.VOTING
+        room["votes"] = {}
+        room["round_voters"] = [
+            pid for pid in room["round_voters"]
+            if any(spid != pid for spid in room["submissions"])
+        ]
+        await store.set_room_state(room_code, room)
+        judge: dict = {}
+        if 0 <= room["judge_index"] < len(room["players"]):
+            judge = room["players"][room["judge_index"]]
+        subs = []
+        for pid, m in room["submissions"].items():
+            p = next((x for x in room["players"] if x["id"] == pid), None)
+            subs.append({
+                "player_id": pid,
+                "player_name": p["name"] if p else "Unbekannt",
+                "meme_url": m["url"],
+            })
+        random.shuffle(subs)
+        await manager.send_to_room(room_code, {
+            "event": "voting_started",
+            "submissions": subs,
+            "judge_id": judge.get("id", ""),
+            "room": room,
+        })
+        # Kein Stimmberechtigter (z.B. alle anderen getrennt): einzige
+        # Einsendung gewinnt automatisch, sonst Runde ohne Sieger beenden.
+        if not room["round_voters"]:
+            self._schedule(room_code, self._finish_round_locked(room_code), delay=0.5)
 
     async def vote(self, room_code: str, player_id: str, target_player_id: str) -> dict:
         async with await _room_lock(room_code):
@@ -705,7 +770,13 @@ class GameLogic:
         for target in room["votes"].values():
             tally[target] = tally.get(target, 0) + 1
         if not tally:
-            return room
+            # Keine Stimmen möglich (z.B. nur 1 Einsendung und niemand
+            # darf sie wählen): Einsendung gewinnt automatisch.
+            if room["submissions"]:
+                winner_id = next(iter(room["submissions"].keys()))
+                tally[winner_id] = 1
+            else:
+                return room
         winner_id = max(tally, key=tally.get)
         room["scores"][winner_id] = room["scores"].get(winner_id, 0) + 1
         for p in room["players"]:
