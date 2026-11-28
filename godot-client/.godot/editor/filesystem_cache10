@@ -1,8 +1,10 @@
 9cad1ddce9e5a63143ba340c9520626b
-::res://::1795857683
-export_presets.cfg::TextFile::-1::1795857319::0::1::::<><><>0<>0<><>::
+::res://::1795869291
+export_presets.cfg::TextFile::-1::1795869295::0::1::::<><><>0<>0<><>::
 icon.svg::CompressedTexture2D::7539970572554036600::1795857319::1795857689::1::::<><><>0<>0<>411eaae809b70dafd3fd8fbb769feeb1<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 README.md::TextFile::-1::1795857319::0::1::::<><><>0<>0<><>::
+::res://android/::1795869291
+::res://android/keystores/::1795869291
 ::res://scenes/::1795857319
 game.tscn::PackedScene::-1::1795857319::0::1::::<><><>0<>0<><>::res://scripts/game.gd
 game_over.tscn::PackedScene::-1::1795857319::0::1::::<><><>0<>0<><>::res://scripts/game_over.gd
@@ -10,7 +12,7 @@ home.tscn::PackedScene::-1::1795857319::0::1::::<><><>0<>0<><>::res://scripts/ho
 lobby.tscn::PackedScene::-1::1795857319::0::1::::<><><>0<>0<><>::res://scripts/lobby.gd
 main_menu.tscn::PackedScene::-1::1795857319::0::1::::<><><>0<>0<><>::res://scripts/main_menu.gd
 ::res://scripts/::1795857319
-game.gd::GDScript::6202681050355966086::1795857319::0::1::::<>Control<><>0<>0<><>::
+game.gd::GDScript::6202681050355966086::1795858062::0::1::::<>Control<><>0<>0<><>::
 game_over.gd::GDScript::7872846090557177563::1795857319::0::1::::<>Control<><>0<>0<><>::
 global.gd::GDScript::2061008330363718654::1795857319::0::1::::<>Node<><>0<>0<><>::
 google_login.gd::GDScript::7314150329860386221::1795857319::0::1::::GoogleLogin<>RefCounted<><>0<>0<><>::
